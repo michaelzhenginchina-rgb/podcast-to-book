@@ -1,8 +1,11 @@
 import sys
 import re
 import json
+import urllib.parse
+import urllib.request
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 from ebooklib import epub
+import argparse
 import os
 
 # Try to load .env file for API keys
@@ -46,21 +49,38 @@ def extract_video_id(url):
         return None
 
 def fetch_video_title(url):
-    # Try to fetch title from YouTube using pytube
+    """Real title from YouTube's oembed endpoint, with fallbacks.
+
+    pytube is tried second because it breaks whenever YouTube changes its
+    player; oembed is a documented endpoint and needs no dependency.
+    """
+    video_id = extract_video_id(url)
+    if video_id:
+        oembed = (
+            "https://www.youtube.com/oembed?url="
+            + urllib.parse.quote(
+                f"https://www.youtube.com/watch?v={video_id}", safe=""
+            )
+            + "&format=json"
+        )
+        try:
+            with urllib.request.urlopen(oembed, timeout=10) as response:
+                title = json.loads(response.read().decode("utf-8")).get("title")
+            if title:
+                return title
+        except Exception:
+            pass
+
     if YouTube:
         try:
-            yt = YouTube(url)
-            title = yt.title
+            title = YouTube(url).title
             if title:
                 return title
         except Exception as e:
             print(f"Could not fetch video title automatically: {e}")
-    
-    # Fallback: use video ID or default
-    video_id = extract_video_id(url)
-    if video_id:
-        return f"YouTube Transcript {video_id}"
-    return "YouTube Transcript"
+
+    return f"YouTube Transcript {video_id}" if video_id else "YouTube Transcript"
+
 
 def sanitize_filename(name):
     # Remove or replace characters not allowed in filenames
@@ -462,7 +482,7 @@ def group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=
     sections = []
     current_section = []
     current_start = 0
-    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0}
+    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0, "cost_known": True}
 
     for entry in transcript:
         if entry.start >= current_start + interval_seconds and current_section:
@@ -475,6 +495,7 @@ def group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=
                 total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
                 total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
                 total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
+                total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
             # Try to end at a complete sentence
             cleaned_section = end_section_at_sentence(cleaned_section)
             sections.append((current_start, current_start + interval_seconds, cleaned_section))
@@ -491,6 +512,7 @@ def group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=
             total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
             total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
             total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
+            total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
         # Add the last section
         cleaned_section = end_section_at_sentence(cleaned_section)
         sections.append((current_start, current_start + interval_seconds, cleaned_section))
@@ -517,7 +539,7 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
         return group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=use_cleaner, api_key=api_key, progress_callback=progress_callback)
 
     sections = []
-    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0}
+    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0, "cost_known": True}
 
     # Sort chapters by timestamp
     sorted_chapters = sorted(chapters, key=lambda x: x['timestamp'])
@@ -555,6 +577,7 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
                 total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
                 total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
                 total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
+                total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
 
             # Try to end at a complete sentence
             cleaned_section = end_section_at_sentence(cleaned_section)
@@ -927,45 +950,67 @@ def save_txt(transcript, title, video_id, sections=None, output_filename=None):
     return output_filename
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <YouTube URL>")
-        sys.exit(1)
-    url = sys.argv[1]
-    video_id = extract_video_id(url)
+    parser = argparse.ArgumentParser(
+        prog="python runtime/main.py",
+        description="Turn a YouTube video into an EPUB you can read.",
+    )
+    parser.add_argument("url", help="YouTube URL")
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="skip the LLM pass - no API key needed, but keeps the ums",
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=20,
+        metavar="MINUTES",
+        help="minutes of transcript per chapter (default: 20)",
+    )
+    args = parser.parse_args()
+
+    video_id = extract_video_id(args.url)
     if not video_id:
         print("Invalid YouTube URL.")
         sys.exit(1)
-    video_title = fetch_video_title(url)
+
+    video_title = fetch_video_title(args.url)
     safe_title = sanitize_filename(video_title)
     transcript = fetch_transcript(video_id)
-
-    # Save raw transcript data
     save_raw_transcript(transcript, video_id, video_title)
 
-    # Enable AI cleaning with OpenAI API
-    print("🤖 Using AI to clean transcript (removing filler words, fixing grammar)...")
     api_key = llm_config.api_key()
+    clean = not args.no_clean
+    if clean and not api_key:
+        print("No API key set - writing the raw transcript. "
+              "Set LLM_API_KEY to clean it, or pass --no-clean to silence this.")
+        clean = False
+    if clean:
+        print(f"🤖 Cleaning with {llm_config.provider_label()}...")
+
     sections, usage_stats = group_transcript_by_interval(
         transcript,
-        interval_seconds=1200,  # 20 min
-        use_cleaner=True,
-        api_key=api_key
+        interval_seconds=max(1, args.interval) * 60,
+        use_cleaner=clean,
+        api_key=api_key,
     )
 
-    # Show token usage if available
-    if usage_stats and usage_stats.get('total_tokens', 0) > 0:
-        print(f"\n📊 AI Cleaning Statistics:")
+    if usage_stats and usage_stats.get("total_tokens", 0) > 0:
+        print("\n📊 AI Cleaning Statistics:")
         print(f"  • Input tokens: {usage_stats['input_tokens']:,}")
         print(f"  • Output tokens: {usage_stats['output_tokens']:,}")
         print(f"  • Total tokens: {usage_stats['total_tokens']:,}")
-        print(f"💰 Cost: ${usage_stats['cost_usd']:.4f} (≈ ¥{usage_stats['cost_cny']:.2f} CNY)\n")
+        if usage_stats.get("cost_known", True):
+            print(f"💰 Cost: ${usage_stats['cost_usd']:.4f} "
+                  f"(≈ ¥{usage_stats['cost_cny']:.2f} CNY)\n")
+        else:
+            print("💰 Cost: unknown for this model "
+                  "(set LLM_PRICE_INPUT / LLM_PRICE_OUTPUT to see it)\n")
 
     chapters = transcript_sections_to_epub_chapters(sections)
     output_filename = f"{safe_title}.epub"
     save_epub(video_title, video_id, chapters, output_filename)
-
-    # Also save as TXT for easy viewing
-    txt_filename = save_txt(transcript, video_title, video_id, sections, f"{safe_title}.txt")
+    save_txt(transcript, video_title, video_id, sections, f"{safe_title}.txt")
 
 
 if __name__ == "__main__":

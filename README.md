@@ -1,27 +1,59 @@
 # Podcast to Book
 
-**Turn a YouTube video or podcast into a clean ebook you can actually read.**
+**Turn a YouTube video or podcast into a clean ebook you can actually read —
+in English, in Chinese, or both.**
+
+![The app](docs/screenshot.png)
 
 Long videos are hard to study. This turns one into a proper EPUB or PDF: it
 pulls the transcript, strips the *ums* and false starts with an LLM, splits it
-into chapters, and writes a book — optionally translated between English and
-Chinese.
+into chapters, and writes a book.
+
+**It also translates.** Point it at an English podcast and ask for a Chinese
+book — the whole thing, chaptered, on your Kindle. That is the part most
+transcript tools do not do, and it is why this exists.
 
 ```text
-YouTube URL  →  transcript  →  AI clean  →  chapters  →  EPUB / PDF
+YouTube URL  →  transcript  →  AI clean  →  translate  →  chapters  →  EPUB / PDF
 ```
 
 A second workflow does the same for documents you already have — PDF, EPUB,
 DOCX, TXT, Markdown, JSON, CSV, subtitles, HTML — extracting the text, building
 a glossary, translating, and packaging the result as a book.
 
-macOS desktop app (Tauri + Python). Everything runs locally except the LLM
-calls, which go to whichever provider you configure — including one running on
-your own machine.
-
 ---
 
-## Setup
+## Try it without installing anything
+
+The Python pipeline is a working command-line tool on its own — no Rust, no
+build, no API key:
+
+```bash
+git clone https://github.com/michaelzhenginchina-rgb/podcast-to-book.git
+cd podcast-to-book
+./setup.sh
+.venv/bin/python runtime/main.py "https://www.youtube.com/watch?v=..." --no-clean
+```
+
+That writes an EPUB in the current folder in about ten seconds. `--no-clean`
+skips the LLM, so it costs nothing — the transcript keeps its *ums*, but you
+can see the whole thing work before deciding to set up a key.
+
+Add a key to `.env` and drop `--no-clean` to get the cleaned version:
+
+```bash
+.venv/bin/python runtime/main.py "<url>" --interval 15
+```
+
+| Flag | Meaning |
+|---|---|
+| `--no-clean` | Skip the LLM pass — no key needed |
+| `--interval MINUTES` | Minutes of transcript per chapter (default 20) |
+
+The desktop app below adds translation, chapter detection, cover generation
+and the document workflow.
+
+## Setup (desktop app)
 
 ```bash
 git clone https://github.com/michaelzhenginchina-rgb/podcast-to-book.git

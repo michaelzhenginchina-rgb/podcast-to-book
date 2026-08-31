@@ -211,10 +211,11 @@ Return ONLY the cleaned transcript text."""
             Dictionary with input_tokens, output_tokens, total_tokens, and cost_usd
         """
         pricing = llm_config.pricing_for(self.model)
-        if pricing is None:
-            # An unlisted model - report tokens, but do not invent a price.
-            total_cost = None
-        else:
+        # For a model with no published price, report zero and flag it rather
+        # than inventing a number - callers still get arithmetic that works.
+        known = pricing is not None
+        total_cost = 0.0
+        if known:
             total_cost = (
                 (self.total_input_tokens / 1_000_000) * pricing["input"]
                 + (self.total_output_tokens / 1_000_000) * pricing["output"]
@@ -224,8 +225,9 @@ Return ONLY the cleaned transcript text."""
             "input_tokens": self.total_input_tokens,
             "output_tokens": self.total_output_tokens,
             "total_tokens": self.total_input_tokens + self.total_output_tokens,
-            "cost_usd": round(total_cost, 4) if total_cost is not None else None,
-            "cost_cny": round(total_cost * 7.2, 2) if total_cost is not None else None,
+            "cost_usd": round(total_cost, 4),
+            "cost_cny": round(total_cost * 7.2, 2),
+            "cost_known": known,
             "model": self.model,
         }
 
@@ -238,6 +240,9 @@ Return ONLY the cleaned transcript text."""
             f"  • Output: {stats['output_tokens']:,} tokens\n"
             f"  • Total: {stats['total_tokens']:,} tokens\n"
             f"💰 Cost: ${stats['cost_usd']} (≈ ¥{stats['cost_cny']} CNY)"
+            if stats["cost_known"]
+            else f"💰 Cost: unknown for {stats['model']} "
+            "(set LLM_PRICE_INPUT / LLM_PRICE_OUTPUT)"
         )
 
 
