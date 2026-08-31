@@ -39,7 +39,7 @@ Use `normal` unless the user asks for speed (`quick`) or higher quality (`refine
 Document translation output directory:
 
 ```text
-~/Desktop/Retrona_Tools_Output/podcast-ebooks/document_translation_YYYYMMDD_HHMMSS
+~/Desktop/PodcastToBook/document_translation_YYYYMMDD_HHMMSS
 ```
 
 Expected files:
@@ -63,7 +63,7 @@ If progress seems stuck, check whether chunk files are appearing:
 
 ```bash
 pgrep -af 'pdf_translation_runner.py|podcast-ebook-desktop'
-find ~/Desktop/Retrona_Tools_Output/podcast-ebooks -maxdepth 3 -path '*/chunks/*' -type f
+find ~/Desktop/PodcastToBook -maxdepth 3 -path '*/chunks/*' -type f
 ```
 
 ## One-Off Mirror PDFs

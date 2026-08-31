@@ -95,10 +95,12 @@ Pick **EPUB** for Kindle and most e-readers; **PDF** keeps fixed layout.
 ## Output
 
 ```text
-~/Desktop/Retrona_Tools_Output/podcast-ebooks/
+~/Desktop/PodcastToBook/
   podcast_YYYYMMDD_HHMMSS/               ebook runs
   document_translation_YYYYMMDD_HHMMSS/  translation runs
 ```
+
+Set `PODCAST_TO_BOOK_OUTPUT` to write somewhere else.
 
 ## Layout
 

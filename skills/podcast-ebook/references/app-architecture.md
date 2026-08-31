@@ -48,7 +48,7 @@ Do not assume dependencies installed in a different project venv are available t
 Default output:
 
 ```text
-~/Desktop/Retrona_Tools_Output/podcast-ebooks
+~/Desktop/PodcastToBook
 ```
 
 YouTube ebook runs:

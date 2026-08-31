@@ -7,6 +7,7 @@ use std::process::Command;
 
 const RUNTIME_ENV: &str = "PODCAST_TO_BOOK_RUNTIME";
 const REPO_ENV: &str = "PODCAST_TO_BOOK_REPO";
+const OUTPUT_ENV: &str = "PODCAST_TO_BOOK_OUTPUT";
 
 /// Root of this repository (or of the installed .app bundle's Resources).
 ///
@@ -91,8 +92,11 @@ struct GenerateResult {
 }
 
 fn desktop_output_root() -> Result<PathBuf, String> {
+    if let Ok(dir) = std::env::var(OUTPUT_ENV) {
+        return Ok(PathBuf::from(dir));
+    }
     let desktop = dirs::desktop_dir().ok_or_else(|| "Could not find Desktop folder".to_string())?;
-    Ok(desktop.join("Retrona_Tools_Output").join("podcast-ebooks"))
+    Ok(desktop.join("PodcastToBook"))
 }
 
 fn read_env_file(path: &Path) -> HashMap<String, String> {

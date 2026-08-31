@@ -22,7 +22,7 @@ Installed macOS app:
 ~/Applications/Podcast Ebook.app
 
 Default app output:
-~/Desktop/Retrona_Tools_Output/podcast-ebooks
+~/Desktop/PodcastToBook
 ```
 
 These paths can vary by machine. Prefer environment variables when running helper scripts:
@@ -51,7 +51,7 @@ If the user asks about document translation in the app:
 
 1. Use desktop app source first.
 2. The app-side runner is `scripts/pdf_translation_runner.py`.
-3. Translation output lives under `Desktop/Retrona_Tools_Output/podcast-ebooks/document_translation_*`.
+3. Translation output lives under `Desktop/PodcastToBook/document_translation_*`.
 4. Supported inputs include PDF, EPUB, DOCX, TXT, Markdown, JSON/JSONL, CSV/TSV, SRT/VTT, HTML, and XML.
 5. The runtime repo must have `pypdf` available for PDF input.
 
