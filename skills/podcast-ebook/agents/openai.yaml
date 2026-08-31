@@ -1,0 +1,6 @@
+interface:
+  display_name: "Podcast Ebook"
+  short_description: "Operate the Podcast Ebook desktop app."
+  default_prompt: "Use $podcast-ebook to work on the Podcast Ebook desktop app, Python runtime, document translation, or ebook generation flow."
+policy:
+  allow_implicit_invocation: true

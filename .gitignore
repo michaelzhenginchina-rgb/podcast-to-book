@@ -1,0 +1,19 @@
+/src-tauri/target/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+
+# secrets - never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# generated output
+*.epub
+*.pdf
+*_transcript.json
+*_transcript.txt

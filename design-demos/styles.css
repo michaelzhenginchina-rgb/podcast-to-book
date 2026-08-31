@@ -1,0 +1,491 @@
+:root {
+  color: #f4f4ef;
+  background: #080807;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(80, 94, 82, 0.18), transparent 34rem),
+    #080807;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.demo-shell {
+  width: min(1280px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 42px 0 70px;
+}
+
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.demo-eyebrow,
+.option-title p,
+.topbar p,
+.topline p,
+.reader-title p {
+  color: #a7aaa3;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+}
+
+h1 {
+  font-size: 48px;
+  line-height: 1;
+  margin: 0;
+}
+
+.demo-note {
+  max-width: 330px;
+  color: #c3c5be;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.demo-nav {
+  display: flex;
+  gap: 10px;
+  padding: 18px 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(8, 8, 7, 0.86);
+  backdrop-filter: blur(16px);
+}
+
+.demo-nav a {
+  color: #f4f4ef;
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.option {
+  padding-top: 40px;
+}
+
+.option-title {
+  margin-bottom: 18px;
+}
+
+.option-title h2 {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+
+.option-title span {
+  color: #b8bab3;
+}
+
+.app-frame {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  min-height: 760px;
+  overflow: hidden;
+}
+
+.grid,
+.book-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+  gap: 18px;
+}
+
+.panel {
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.panel-head span {
+  color: #9ea098;
+}
+
+label {
+  display: block;
+  color: #d4d5cf;
+  font-size: 13px;
+  font-weight: 650;
+  margin: 0 0 8px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border-radius: 8px;
+  outline: 0;
+  min-height: 46px;
+  padding: 13px 14px;
+  margin-bottom: 15px;
+}
+
+textarea {
+  min-height: 108px;
+  resize: vertical;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 760;
+}
+
+.log {
+  margin: 18px;
+}
+
+pre {
+  margin: 0;
+  min-height: 100px;
+  color: inherit;
+}
+
+.option-a .app-frame {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18rem),
+    #050505;
+  padding: 30px;
+}
+
+.option-a .topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  padding-bottom: 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+  margin-bottom: 22px;
+}
+
+.option-a h3 {
+  font-size: 58px;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.option-a .topbar button,
+.option-a .secondary {
+  background: transparent;
+  color: #f4f4ef;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  padding: 10px 14px;
+  border-radius: 999px;
+}
+
+.option-a .panel {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.option-a input,
+.option-a select,
+.option-a textarea {
+  color: #fff;
+  background: #090909;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.option-a .chips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.option-a .chips span,
+.option-a .status,
+.option-a .summary,
+.option-a .empty {
+  border-radius: 8px;
+  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d9dad4;
+}
+
+.option-a .empty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+}
+
+.option-a .primary {
+  background: #f4f4ef;
+  color: #050505;
+  border: 1px solid #f4f4ef;
+}
+
+.option-b .app-frame {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  background: #090b0d;
+}
+
+.option-b .side {
+  padding: 28px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: #070808;
+}
+
+.option-b .side h3 {
+  font-size: 28px;
+  line-height: 1;
+  margin: 0 0 38px;
+}
+
+.option-b .side span {
+  display: block;
+  color: #a5aba8;
+  padding: 11px 0;
+}
+
+.option-b .main-area {
+  padding: 28px;
+}
+
+.option-b .topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.option-b .topline h3 {
+  margin: 0;
+  font-size: 34px;
+}
+
+.option-b .topline button {
+  color: #d7f8e8;
+  background: rgba(52, 116, 87, 0.16);
+  border: 1px solid rgba(84, 180, 130, 0.35);
+  border-radius: 999px;
+  padding: 10px 14px;
+}
+
+.option-b .panel {
+  background: #101316;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.option-b input,
+.option-b select,
+.option-b textarea {
+  color: #eef3f0;
+  background: #080a0c;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.option-b .toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.option-b .toggles span {
+  color: #c6dad0;
+  background: rgba(67, 122, 96, 0.18);
+  border: 1px solid rgba(101, 162, 129, 0.24);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.option-b .primary {
+  background: #dffbea;
+  border: 1px solid #dffbea;
+  color: #07100c;
+}
+
+.option-b h4 {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+
+.option-b .meter {
+  height: 8px;
+  border-radius: 999px;
+  background: #22282b;
+  margin-bottom: 16px;
+}
+
+.option-b .meter span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: #dffbea;
+}
+
+.option-b .soft {
+  color: #aeb7b2;
+  margin-bottom: 24px;
+}
+
+.option-b .metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.option-b .metric span {
+  color: #8e9994;
+}
+
+.option-c .app-frame {
+  background:
+    radial-gradient(circle at 82% 12%, rgba(147, 115, 66, 0.16), transparent 24rem),
+    #0d0c0a;
+  padding: 34px;
+}
+
+.option-c .reader-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 26px;
+}
+
+.option-c .reader-title h3 {
+  max-width: 680px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.option-c .reader-title button {
+  color: #eadabd;
+  background: transparent;
+  border: 1px solid rgba(234, 218, 189, 0.28);
+  border-radius: 999px;
+  padding: 9px 14px;
+}
+
+.option-c .book-form,
+.option-c .book-preview {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(234, 218, 189, 0.16);
+  padding: 24px;
+}
+
+.option-c input,
+.option-c select,
+.option-c textarea {
+  color: #f8f0e3;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(234, 218, 189, 0.18);
+}
+
+.option-c .pill-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.option-c .pill-row span {
+  color: #eadabd;
+  border: 1px solid rgba(234, 218, 189, 0.22);
+  border-radius: 999px;
+  padding: 7px 10px;
+}
+
+.option-c .primary {
+  background: #eadabd;
+  color: #17110a;
+  border: 1px solid #eadabd;
+}
+
+.option-c .cover {
+  min-height: 420px;
+  border-radius: 8px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    linear-gradient(180deg, rgba(234, 218, 189, 0.16), rgba(0, 0, 0, 0.24)),
+    #17120c;
+  border: 1px solid rgba(234, 218, 189, 0.2);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.38);
+}
+
+.option-c .cover span,
+.option-c .cover em {
+  color: #c8b996;
+}
+
+.option-c .cover strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  font-weight: 500;
+  line-height: 1.06;
+}
+
+.option-c .book-output {
+  padding-top: 18px;
+  color: #d6c8aa;
+}
+
+@media (max-width: 900px) {
+  .demo-header,
+  .grid,
+  .book-layout,
+  .option-b .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-header {
+    display: block;
+  }
+
+  .two,
+  .option-a .chips {
+    grid-template-columns: 1fr;
+  }
+}

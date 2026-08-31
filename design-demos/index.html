@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Podcast Ebook UI Demos</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="demo-shell">
+      <header class="demo-header">
+        <div>
+          <p class="demo-eyebrow">Design exploration</p>
+          <h1>Podcast Ebook UI directions</h1>
+        </div>
+        <p class="demo-note">Static demos only. Pick a direction before we touch the real app.</p>
+      </header>
+
+      <nav class="demo-nav" aria-label="Design options">
+        <a href="#option-a">Option A</a>
+        <a href="#option-b">Option B</a>
+        <a href="#option-c">Option C</a>
+      </nav>
+
+      <section id="option-a" class="option option-a">
+        <div class="option-title">
+          <p>Option A</p>
+          <h2>Original black, refined</h2>
+          <span>Closest to what you already liked</span>
+        </div>
+        <div class="app-frame">
+          <div class="topbar">
+            <div>
+              <p>YouTube transcript to ebook</p>
+              <h3>Podcast Ebook</h3>
+            </div>
+            <button>Local workflow</button>
+          </div>
+          <div class="grid">
+            <form class="panel large">
+              <div class="panel-head"><strong>Create ebook</strong><span>01</span></div>
+              <label>YouTube URL</label>
+              <textarea placeholder="https://www.youtube.com/watch?v=..."></textarea>
+              <label>Book Title</label>
+              <input placeholder="Leave blank to use the YouTube title" />
+              <div class="two">
+                <div><label>Format</label><select><option>EPUB (Kindle)</option></select></div>
+                <div><label>Original Video Language</label><select><option>Auto detect</option></select></div>
+              </div>
+              <div class="two">
+                <div><label>Book Language</label><select><option>Same as original</option></select></div>
+                <div><label>Fallback sections</label><select><option>20 min</option></select></div>
+              </div>
+              <div class="chips">
+                <span>✓ Auto-use YouTube chapters</span>
+                <span>✓ AI cleaning</span>
+              </div>
+              <label>AI clean mode</label>
+              <select><option>Fast clean (recommended for long videos)</option></select>
+              <button class="primary" type="button">Generate Ebook</button>
+            </form>
+            <aside class="panel">
+              <div class="panel-head"><strong>Output</strong><span>02</span></div>
+              <div class="status">Ready</div>
+              <div class="summary">Title, chapter mode, AI cleaning, cover, and timing will appear here.</div>
+              <div class="empty">Generated EPUB, TXT, and transcript files will appear here.</div>
+              <button class="secondary" type="button">Open Output Folder</button>
+            </aside>
+          </div>
+          <div class="panel log"><div class="panel-head"><strong>Process log</strong><span>03</span></div><pre>No run yet.</pre></div>
+        </div>
+      </section>
+
+      <section id="option-b" class="option option-b">
+        <div class="option-title">
+          <p>Option B</p>
+          <h2>Dark command center</h2>
+          <span>Denser, more pro-tool, less website</span>
+        </div>
+        <div class="app-frame">
+          <aside class="side">
+            <h3>Podcast<br />Ebook</h3>
+            <span>Generate</span>
+            <span>Library</span>
+            <span>Settings</span>
+          </aside>
+          <section class="main-area">
+            <div class="topline">
+              <div><p>New ebook</p><h3>Create from YouTube</h3></div>
+              <button>Run locally</button>
+            </div>
+            <div class="grid">
+              <form class="panel large">
+                <label>YouTube URL</label>
+                <textarea placeholder="Paste YouTube URL"></textarea>
+                <div class="two">
+                  <div><label>Original</label><select><option>Auto detect</option></select></div>
+                  <div><label>Output</label><select><option>Same as original</option></select></div>
+                </div>
+                <div class="two">
+                  <div><label>Format</label><select><option>EPUB</option></select></div>
+                  <div><label>Clean mode</label><select><option>Fast clean</option></select></div>
+                </div>
+                <div class="toggles">
+                  <span>Chapters on</span>
+                  <span>AI clean on</span>
+                  <span>Thumbnail cover</span>
+                </div>
+                <button class="primary" type="button">Generate</button>
+              </form>
+              <aside class="panel">
+                <h4>Status</h4>
+                <div class="meter"><span></span></div>
+                <p class="soft">Waiting for a YouTube URL.</p>
+                <div class="metric"><span>Title</span><strong>Auto from YouTube</strong></div>
+                <div class="metric"><span>Cover</span><strong>Thumbnail</strong></div>
+                <div class="metric"><span>Timing</span><strong>Tracked</strong></div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="option-c" class="option option-c">
+        <div class="option-title">
+          <p>Option C</p>
+          <h2>Midnight reader</h2>
+          <span>More book-like, elegant, warmer black</span>
+        </div>
+        <div class="app-frame">
+          <div class="reader-title">
+            <div>
+              <p>Podcast Ebook</p>
+              <h3>Turn long conversations into books.</h3>
+            </div>
+            <button>Local</button>
+          </div>
+          <div class="book-layout">
+            <form class="book-form">
+              <label>YouTube URL</label>
+              <textarea placeholder="https://www.youtube.com/watch?v=..."></textarea>
+              <label>Book Title</label>
+              <input placeholder="Use YouTube title automatically" />
+              <div class="two">
+                <div><label>Language</label><select><option>Auto detect</option></select></div>
+                <div><label>Book</label><select><option>Same as original</option></select></div>
+              </div>
+              <div class="pill-row"><span>Chapters</span><span>AI clean</span><span>Cover</span></div>
+              <button class="primary" type="button">Create Ebook</button>
+            </form>
+            <aside class="book-preview">
+              <div class="cover">
+                <span>Podcast Ebook</span>
+                <strong>YouTube Title</strong>
+                <em>Clean transcript · Chapters · Cover</em>
+              </div>
+              <div class="book-output">
+                <strong>Ready</strong>
+                <p>Your EPUB package will appear here.</p>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

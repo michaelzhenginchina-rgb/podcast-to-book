@@ -1,0 +1,10 @@
+streamlit
+youtube-transcript-api
+ebooklib
+pytube
+reportlab
+python-dotenv
+playwright
+playwright[chromium]
+openai
+pypdf
