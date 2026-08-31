@@ -1,37 +1,32 @@
 """
-Transcript Cleaner Module using OpenAI API
+Transcript cleaning via any OpenAI-compatible LLM (see llm_config)
 Cleans podcast/interview transcripts by removing filler words and improving readability
 """
 
 import os
 from typing import List, Dict, Optional
-from openai import OpenAI
+import llm_config
 
 
 class TranscriptCleaner:
-    """Clean transcripts using OpenAI GPT models"""
+    """Clean transcripts using whichever model llm_config selects."""
 
-    # Pricing per 1M tokens (in USD)
-    PRICING = {
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
-    }
-
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize the transcript cleaner
 
         Args:
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
-            model: Model to use (default: gpt-4o-mini for cost efficiency)
+            api_key: overrides LLM_API_KEY / OPENAI_API_KEY
+            model:   overrides LLM_MODEL
         """
-        self.api_key = api_key or os.environ.get('OPENAI_API_KEY')
+        self.api_key = api_key or llm_config.api_key()
         if not self.api_key:
-            raise ValueError("OpenAI API key not provided. Set OPENAI_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError(
+                "No API key. Set LLM_API_KEY (or OPENAI_API_KEY), or pass api_key."
+            )
+        self.model = model or llm_config.model()
 
-        self.client = OpenAI(api_key=self.api_key)
-        self.model = model
+        self.client = llm_config.client(api_key=self.api_key)
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
@@ -215,17 +210,23 @@ Return ONLY the cleaned transcript text."""
         Returns:
             Dictionary with input_tokens, output_tokens, total_tokens, and cost_usd
         """
-        pricing = self.PRICING.get(self.model, {"input": 0.15, "output": 0.60})
-        input_cost = (self.total_input_tokens / 1_000_000) * pricing["input"]
-        output_cost = (self.total_output_tokens / 1_000_000) * pricing["output"]
-        total_cost = input_cost + output_cost
+        pricing = llm_config.pricing_for(self.model)
+        if pricing is None:
+            # An unlisted model - report tokens, but do not invent a price.
+            total_cost = None
+        else:
+            total_cost = (
+                (self.total_input_tokens / 1_000_000) * pricing["input"]
+                + (self.total_output_tokens / 1_000_000) * pricing["output"]
+            )
 
         return {
             "input_tokens": self.total_input_tokens,
             "output_tokens": self.total_output_tokens,
             "total_tokens": self.total_input_tokens + self.total_output_tokens,
-            "cost_usd": round(total_cost, 4),
-            "cost_cny": round(total_cost * 7.2, 2),  # Approximate CNY conversion
+            "cost_usd": round(total_cost, 4) if total_cost is not None else None,
+            "cost_cny": round(total_cost * 7.2, 2) if total_cost is not None else None,
+            "model": self.model,
         }
 
     def get_usage_summary(self) -> str:
@@ -240,7 +241,7 @@ Return ONLY the cleaned transcript text."""
         )
 
 
-def clean_transcript_text(text: str, api_key: Optional[str] = None, model: str = "gpt-4o-mini") -> str:
+def clean_transcript_text(text: str, api_key: Optional[str] = None, model: Optional[str] = None) -> str:
     """
     Convenience function to clean transcript text
 

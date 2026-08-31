@@ -14,7 +14,10 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from runtime_paths import env_file  # noqa: E402
+from runtime_paths import ensure_importable, env_file  # noqa: E402
+
+ensure_importable()
+import llm_config  # noqa: E402
 
 try:
     from dotenv import load_dotenv
@@ -327,10 +330,10 @@ class Translator:
     def __init__(self, api_key, model):
         if not api_key:
             raise RuntimeError(
-                "OPENAI_API_KEY is missing. Add it to the runtime's .env "
+                "No API key. Add LLM_API_KEY (or OPENAI_API_KEY) to .env "
                 "(see .env.example) or export it in your shell."
             )
-        self.client = OpenAI(api_key=api_key, timeout=90, max_retries=2)
+        self.client = llm_config.client(api_key=api_key, timeout=90, max_retries=2)
         self.model = model
         self.usage = Usage()
 
@@ -627,7 +630,7 @@ def parse_args():
     parser.add_argument("--title", default="")
     parser.add_argument("--target", choices=["zh", "en"], default="zh")
     parser.add_argument("--mode", choices=["quick", "normal", "refined"], default="normal")
-    parser.add_argument("--model", default="gpt-4o-mini")
+    parser.add_argument("--model", default=None)
     return parser.parse_args()
 
 
@@ -644,7 +647,7 @@ def main():
     title = args.title.strip() or source_path.stem
     safe_title = sanitize_filename(title)
     target_info = TARGETS[args.target]
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = llm_config.api_key()
 
     print(f"Source file: {source_path}", flush=True)
     print(f"Title: {title}", flush=True)
@@ -659,7 +662,7 @@ def main():
     )
 
     Path("source_extracted.md").write_text(source_text, encoding="utf-8")
-    translator = Translator(api_key=api_key, model=args.model)
+    translator = Translator(api_key=api_key, model=args.model or llm_config.model())
 
     print("Analyzing style and glossary...", flush=True)
     analysis = translator.analyze(source_text, title, args.target, source_kind)

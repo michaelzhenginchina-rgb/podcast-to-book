@@ -44,6 +44,6 @@ def ensure_importable() -> Path:
 
 
 def env_file() -> Path | None:
-    """The .env holding OPENAI_API_KEY, or None if it has not been created."""
+    """The .env holding the LLM credentials, or None if not created yet."""
     candidate = REPO / ".env"
     return candidate if candidate.is_file() else None

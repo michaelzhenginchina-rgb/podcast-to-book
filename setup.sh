@@ -23,7 +23,7 @@ echo "Installing Python dependencies"
 if [ ! -f "$HERE/.env" ]; then
   cp "$HERE/.env.example" "$HERE/.env"
   chmod 600 "$HERE/.env"
-  echo "Created .env - add your OPENAI_API_KEY to it."
+  echo "Created .env - add your LLM_API_KEY to it."
 fi
 
 cat <<MSG
@@ -32,6 +32,6 @@ Done.
   Python: $VENV/bin/python
 
 Next:
-  1. Put your OpenAI key in $HERE/.env
+  1. Put your API key in $HERE/.env (any OpenAI-compatible provider)
   2. cargo tauri dev      (install the CLI first: cargo install tauri-cli)
 MSG

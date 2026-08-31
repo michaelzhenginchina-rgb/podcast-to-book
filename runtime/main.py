@@ -18,6 +18,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+import llm_config
 from transcript_cleaner import TranscriptCleaner
 
 # Try to import playwright for better transcript fetching
@@ -442,7 +443,7 @@ def clean_transcript_entries(entries, use_cleaner=False, api_key=None, progress_
 
     try:
         print("Using LLM to clean transcript...")
-        cleaner = TranscriptCleaner(api_key=api_key, model="gpt-4o-mini")
+        cleaner = TranscriptCleaner(api_key=api_key)
         cleaned_entries = cleaner.clean_transcript_entries(entries, batch_size=30, progress_callback=progress_callback)
         print(f"Cleaned {len(entries)} entries -> {len(cleaned_entries)} entries")
 
@@ -943,7 +944,7 @@ def main():
 
     # Enable AI cleaning with OpenAI API
     print("🤖 Using AI to clean transcript (removing filler words, fixing grammar)...")
-    api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = llm_config.api_key()
     sections, usage_stats = group_transcript_by_interval(
         transcript,
         interval_seconds=1200,  # 20 min

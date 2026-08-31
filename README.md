@@ -16,7 +16,8 @@ DOCX, TXT, Markdown, JSON, CSV, subtitles, HTML — extracting the text, buildin
 a glossary, translating, and packaging the result as a book.
 
 macOS desktop app (Tauri + Python). Everything runs locally except the LLM
-calls, which go to your own OpenAI key.
+calls, which go to whichever provider you configure — including one running on
+your own machine.
 
 ---
 
@@ -29,7 +30,7 @@ cd podcast-to-book
 ```
 
 `setup.sh` creates `.venv/`, installs the Python dependencies, and copies
-`.env.example` to `.env`. Put your OpenAI key in that `.env`, then:
+`.env.example` to `.env`. Put your API key in that `.env`, then:
 
 ```bash
 cargo install tauri-cli     # once
@@ -37,13 +38,36 @@ cargo tauri dev             # run it
 cargo tauri build           # or build Podcast to Book.app
 ```
 
-**Requirements:** macOS 10.13+, Rust, Python 3.9+, and an
-[OpenAI API key](https://platform.openai.com/api-keys).
+**Requirements:** macOS 10.13+, Rust, Python 3.9+, and an API key from any
+OpenAI-compatible provider — see [Choosing an LLM](#choosing-an-llm).
+
+## Choosing an LLM
+
+Not tied to OpenAI. Anything exposing an **OpenAI-compatible chat-completions
+endpoint** works — point `LLM_BASE_URL` at it and name the model in `.env`:
+
+| Provider | `LLM_BASE_URL` | Example `LLM_MODEL` |
+|---|---|---|
+| OpenAI | *(leave unset)* | `gpt-4o-mini` |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| Moonshot / Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| Zhipu / GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| Qwen (DashScope) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` |
+| Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
+
+`.env.example` lists these ready to uncomment. With Ollama nothing leaves your
+machine and there is no bill — put any placeholder in `LLM_API_KEY`.
+
+Cost reporting only knows OpenAI's published prices; for other providers set
+`LLM_PRICE_INPUT` / `LLM_PRICE_OUTPUT` (USD per 1M tokens) or the run simply
+reports tokens without inventing a number.
 
 ## Configuration
 
-`OPENAI_API_KEY` is the only thing you need. The app asks for nothing else — no
-account, no email, no password.
+`LLM_API_KEY` is the only thing you need. The app asks for nothing else — no
+account, no email, no password. (`OPENAI_API_KEY` still works.)
 
 Everything is resolved relative to the repository, so a clone works wherever you
 put it. These overrides exist but are rarely needed:
@@ -93,9 +117,10 @@ staying where it was built.
 
 ## Cost
 
-Transcript cleaning and translation call the OpenAI API and cost real money.
-A typical hour-long video runs a few cents on `gpt-4o-mini`. The app reports
-token usage and cost after each run.
+Transcript cleaning and translation call an LLM, which usually costs money.
+A typical hour-long video runs a few cents on `gpt-4o-mini`, less on DeepSeek,
+and nothing at all on a local Ollama model. The app reports token usage after
+each run.
 
 ## Known limits
 

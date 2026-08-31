@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from runtime_paths import ensure_importable  # noqa: E402
 
 PODCAST_ROOT = ensure_importable()
+import llm_config  # noqa: E402
 
 from main import (  # noqa: E402
     extract_video_id,
@@ -250,10 +251,10 @@ def llm_cover_concept(title, sections, api_key):
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=api_key, timeout=45)
+    client = llm_config.client(api_key=api_key, timeout=45)
     sample = sections_sample_text(sections)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=llm_config.model(),
         messages=[
             {
                 "role": "system",
@@ -585,13 +586,13 @@ def split_cleaned_text_into_entries(text, start, end, max_chars=420):
 def translate_sections_to_chinese(sections, api_key, target):
     if not api_key:
         raise RuntimeError(
-            "Chinese transcript was not available from YouTube, and OPENAI_API_KEY is missing for LLM translation."
+            "Chinese transcript was not available from YouTube, and no API key is set for LLM translation."
         )
 
     from openai import OpenAI
 
     target_name = "Simplified Chinese" if target == "zh-Hans" else "Traditional Chinese"
-    client = OpenAI(api_key=api_key)
+    client = llm_config.client(api_key=api_key)
     translated_sections = []
 
     for index, section in enumerate(sections, 1):
@@ -607,7 +608,7 @@ def translate_sections_to_chinese(sections, api_key, target):
         else:
             print(f"LLM translating section {index}/{len(sections)} to {target_name}...")
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=llm_config.model(),
                 messages=[
                     {
                         "role": "system",
@@ -674,11 +675,11 @@ def cleaning_mode_label(clean_mode):
 
 def fast_clean_sections(sections, api_key, clean_mode="fast"):
     if not api_key:
-        raise RuntimeError("AI cleaning requested, but OPENAI_API_KEY is missing.")
+        raise RuntimeError("AI cleaning requested, but no API key is set.")
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=api_key, timeout=120)
+    client = llm_config.client(api_key=api_key, timeout=120)
     cleaned_sections = []
     section_timings = []
     usage_stats = {
@@ -717,7 +718,7 @@ def fast_clean_sections(sections, api_key, clean_mode="fast"):
                     flush=True,
                 )
                 response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=llm_config.model(),
                     messages=[
                         {
                             "role": "system",
@@ -889,12 +890,12 @@ def translate_text_file(source_file, title, target_language, api_key):
     if current:
         chunks.append("\n\n".join(current))
 
-    client = OpenAI(api_key=api_key)
+    client = llm_config.client(api_key=api_key)
     translated_chunks = []
     for index, chunk in enumerate(chunks, 1):
         print(f"Translating chunk {index}/{len(chunks)}...")
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=llm_config.model(),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": chunk},
@@ -998,10 +999,10 @@ def main():
         else:
             print("No YouTube chapters found. Falling back to interval sections.")
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = llm_config.api_key()
     use_cleaner = args.ai_clean and bool(api_key)
     if args.ai_clean and not api_key:
-        print("AI cleaning requested, but OPENAI_API_KEY is missing. Using raw transcript.")
+        print("AI cleaning requested, but no API key is set. Using raw transcript.")
     elif use_cleaner:
         print(f"AI {args.clean_mode} cleaning enabled with GPT-4o-mini.")
 
@@ -1047,7 +1048,7 @@ def main():
             "llm_translate_to_chinese_seconds",
             lambda: translate_sections_to_chinese(
                 sections,
-                api_key=os.environ.get("OPENAI_API_KEY"),
+                api_key=llm_config.api_key(),
                 target=target_language_code,
             ),
         )
