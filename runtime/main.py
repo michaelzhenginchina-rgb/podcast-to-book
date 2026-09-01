@@ -684,6 +684,19 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
     return sections, total_usage_stats if use_cleaner else None
 
 
+def create_title_page(title, video_id):
+    html = f"""
+    <html><head></head><body>
+    <h1 style='text-align:center;margin-top:2em;font-size:2.5em;'>{title}</h1>
+    <h3 style='text-align:center;margin-top:1em;'>YouTube Transcript</h3>
+    <p style='text-align:center;margin-top:2em;'>Video ID: {video_id}</p>
+    </body></html>
+    """
+    title_page = epub.EpubHtml(title='Title Page', file_name='title.xhtml', lang='en')
+    title_page.content = html
+    return title_page
+
+
 def transcript_sections_to_epub_chapters(sections):
     chapters = []
     for idx, section in enumerate(sections, 1):
@@ -983,8 +996,13 @@ def save_txt(transcript, title, video_id, sections=None, output_filename=None):
 
         # Content by sections if provided
         if sections:
-            for idx, (start, end, entries) in enumerate(sections, 1):
-                section_title = f"Section {idx}: {format_timestamp(start)}–{format_timestamp(end)}"
+            for idx, section in enumerate(sections, 1):
+                # Chapter sections carry a title; interval sections do not
+                if len(section) == 4:
+                    start, end, entries, section_title = section
+                else:
+                    start, end, entries = section
+                    section_title = f"Section {idx}: {format_timestamp(start)}–{format_timestamp(end)}"
                 f.write(f"\n{'─'*60}\n")
                 f.write(f"{section_title}\n")
                 f.write(f"{'─'*60}\n\n")
