@@ -28,10 +28,13 @@ fi
 
 cat <<MSG
 
-Done.
-  Python: $VENV/bin/python
+Done. Make a book right now - no API key needed:
 
-Next:
-  1. Put your API key in $HERE/.env (any OpenAI-compatible provider)
-  2. cargo tauri dev      (install the CLI first: cargo install tauri-cli)
+  $VENV/bin/python runtime/main.py "https://www.youtube.com/watch?v=..." --no-clean
+
+That writes an EPUB in this folder, chaptered from the video's own chapters.
+
+Then, optionally:
+  1. Put your API key in $HERE/.env to clean up the transcript
+  2. cargo tauri dev      (desktop app; install the CLI first: cargo install tauri-cli)
 MSG

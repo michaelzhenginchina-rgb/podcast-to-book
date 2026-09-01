@@ -1,11 +1,13 @@
-streamlit
 youtube-transcript-api
 yt-dlp
 ebooklib
 pytube
 reportlab
+pillow
 python-dotenv
-playwright
-playwright[chromium]
 openai
 pypdf
+
+# Optional: `pip install playwright && playwright install chromium` adds a
+# browser-based transcript fallback for videos the API cannot reach. The code
+# runs fine without it - it is 450MB, so it is not installed by default.
