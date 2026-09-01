@@ -27,6 +27,7 @@ from main import (  # noqa: E402
     group_transcript_by_interval,
     normalize_caption_text,
     sanitize_filename,
+    split_into_sentences,
     sanitize_transcript_entries,
     format_timestamp,
     save_raw_transcript,
@@ -540,11 +541,7 @@ def split_cleaned_text_into_entries(text, start, end, max_chars=420):
     if not normalized:
         return []
 
-    sentences = [
-        sentence.strip()
-        for sentence in re.split(r"(?<=[。！？.!?])\s*", normalized)
-        if sentence.strip()
-    ]
+    sentences = split_into_sentences(normalized)
     if not sentences:
         sentences = [normalized]
 

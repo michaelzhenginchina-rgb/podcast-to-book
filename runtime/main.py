@@ -723,6 +723,14 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
 PARAGRAPH_TARGET_CHARS = 420
 PARAGRAPH_HARD_CAP = 1200
 
+# Whitespace after the period is required, or "$3.5 billion" splits into
+# "$3." and "5 billion" and gets rejoined as "$3. 5 billion".
+SENTENCE_SPLIT = re.compile(r"(?<=[.!?。！？])[\"'”’)\]]*\s+")
+
+
+def split_into_sentences(text):
+    return [sentence.strip() for sentence in SENTENCE_SPLIT.split(text) if sentence.strip()]
+
 
 def entries_to_paragraphs(entries, target_chars=PARAGRAPH_TARGET_CHARS, hard_cap=PARAGRAPH_HARD_CAP):
     """Assemble caption fragments into readable paragraphs.
@@ -742,11 +750,7 @@ def entries_to_paragraphs(entries, target_chars=PARAGRAPH_TARGET_CHARS, hard_cap
 
     # Sentences are found in the assembled text, not per entry: a caption line
     # breaks every few words, so a sentence almost always ends inside one
-    sentences = [
-        sentence.strip()
-        for sentence in re.split(r"(?<=[.!?。！？])\s+", text)
-        if sentence.strip()
-    ]
+    sentences = split_into_sentences(text)
 
     if len(sentences) == 1 and len(text) > hard_cap:
         # Captions with no punctuation at all — nothing to break on but length
