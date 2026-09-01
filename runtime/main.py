@@ -496,6 +496,14 @@ def _drop_sound_tag(match):
     # "[inaudible 01:12]" and friends
     if re.fullmatch(r"(?:%s)[\s\d:]*" % "|".join(CAPTION_KNOWN_TAGS), normalized):
         return " "
+    # Compound tags: "[sighs and gasps]", "[music, applause]"
+    parts = [
+        part.strip()
+        for part in re.split(r"\s*(?:,|&|\+|\band\b)\s*", normalized)
+        if part.strip()
+    ]
+    if len(parts) > 1 and all(part in CAPTION_KNOWN_TAGS for part in parts):
+        return " "
     return match.group(0)
 
 
