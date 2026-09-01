@@ -232,7 +232,8 @@ fn generate_podcast_ebook_impl(
         command.arg("--auto-chapters");
     }
 
-    for (key, value) in read_env_file(&podcast_root.join(".env")) {
+    // .env lives at the repo root, next to setup.sh - not inside runtime/
+    for (key, value) in read_env_file(&repo_root()?.join(".env")) {
         command.env(key, value);
     }
 
@@ -332,7 +333,8 @@ fn translate_document_impl(
         .env("PYTHONPATH", &podcast_root)
         .env(RUNTIME_ENV, &podcast_root);
 
-    for (key, value) in read_env_file(&podcast_root.join(".env")) {
+    // .env lives at the repo root, next to setup.sh - not inside runtime/
+    for (key, value) in read_env_file(&repo_root()?.join(".env")) {
         command.env(key, value);
     }
 

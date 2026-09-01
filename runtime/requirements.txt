@@ -1,5 +1,6 @@
 streamlit
 youtube-transcript-api
+yt-dlp
 ebooklib
 pytube
 reportlab

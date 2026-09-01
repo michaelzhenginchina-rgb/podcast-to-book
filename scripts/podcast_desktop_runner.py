@@ -12,6 +12,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runtime_paths  # noqa: E402
 from runtime_paths import ensure_importable  # noqa: E402
 
 PODCAST_ROOT = ensure_importable()
@@ -19,11 +20,13 @@ import llm_config  # noqa: E402
 
 from main import (  # noqa: E402
     extract_video_id,
-    fetch_youtube_chapters,
+    fetch_video_metadata,
     generate_pdf,
     group_transcript_by_chapters,
     group_transcript_by_interval,
+    normalize_caption_text,
     sanitize_filename,
+    sanitize_transcript_entries,
     format_timestamp,
     save_raw_transcript,
 )
@@ -32,8 +35,9 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: E402
 
 
 def load_local_env():
-    env_file = PODCAST_ROOT / ".env"
-    if not env_file.exists():
+    # .env sits at the repo root, next to setup.sh - not inside runtime/
+    env_file = runtime_paths.env_file()
+    if env_file is None:
         return
     for raw_line in env_file.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -70,27 +74,10 @@ def timed(timer, name, callback):
 
 
 def fetch_youtube_metadata(url, video_id):
-    metadata = {"title": f"YouTube Transcript {video_id}", "thumbnail": None}
-    try:
-        result = subprocess.run(
-            ["yt-dlp", "--dump-single-json", "--skip-download", "--no-playlist", url],
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=True,
-        )
-        data = json.loads(result.stdout)
-        metadata["title"] = data.get("title") or metadata["title"]
-        metadata["thumbnail"] = data.get("thumbnail")
-        thumbnails = data.get("thumbnails") or []
-        if thumbnails:
-            best = sorted(
-                thumbnails,
-                key=lambda item: (item.get("width") or 0) * (item.get("height") or 0),
-            )[-1]
-            metadata["thumbnail"] = best.get("url") or metadata["thumbnail"]
-    except Exception as error:
-        print(f"Could not fetch YouTube metadata with yt-dlp: {error}")
+    """Title, thumbnail and chapters from one metadata lookup."""
+    metadata = fetch_video_metadata(url, video_id)
+    if not metadata["title"]:
+        metadata["title"] = f"YouTube Transcript {video_id}"
     return metadata
 
 
@@ -546,7 +533,9 @@ def looks_chinese(entries):
 
 
 def split_cleaned_text_into_entries(text, start, end, max_chars=420):
-    normalized = re.sub(r"\s+", " ", text).strip()
+    # Second pass: the model sometimes echoes a caption tag back or answers in
+    # markdown, and neither belongs in the book
+    normalized = normalize_caption_text(text)
     if not normalized:
         return []
 
@@ -652,7 +641,9 @@ def cleaning_system_prompt(clean_mode):
             "they are meaningless fillers; keep them when they carry rhythm, "
             "emphasis, hesitation, or natural spoken tone. Preserve names, numbers, "
             "technical terms, examples, jokes, and nuance exactly. Do not add new "
-            "ideas. Output only the lightly cleaned transcript text."
+            "ideas. Drop caption artifacts such as '>>' speaker markers and "
+            "bracketed sound tags like [Music] or [laughter]. Output plain prose "
+            "only: no markdown, no headings, no bullets, no speaker labels."
         )
 
     return (
@@ -661,7 +652,9 @@ def cleaning_system_prompt(clean_mode):
         "verbal tics, and excessive laughter markers. For Chinese, remove words "
         "like 嗯、啊、呃、这个、那个、就是、然后 when they are filler. Preserve "
         "meaning, speaker intent, names, technical terms, and important nuance. "
-        "Do not add new ideas. Output only the cleaned transcript text."
+        "Drop caption artifacts such as '>>' speaker markers and bracketed sound "
+        "tags like [Music] or [laughter]. Do not add new ideas. Output plain "
+        "prose only: no markdown, no headings, no bullets, no speaker labels."
     )
 
 
@@ -965,6 +958,7 @@ def main():
         "fetch_transcript_seconds",
         lambda: fetch_transcript_smart(video_id, args.language),
     )
+    transcript = sanitize_transcript_entries(transcript)
     if looks_chinese(transcript):
         print(
             f"Transcript text appears to be Chinese, despite YouTube language code {source_language_code}."
@@ -988,12 +982,8 @@ def main():
 
     chapters = None
     if args.auto_chapters:
-        print("Checking for YouTube chapters...")
-        chapters = timed(
-            timer,
-            "detect_chapters_seconds",
-            lambda: fetch_youtube_chapters(video_id),
-        )
+        # Already fetched with the title — YouTube's own chapter markers
+        chapters = metadata.get("chapters") or None
         if chapters:
             print(f"Found {len(chapters)} YouTube chapters.")
         else:
@@ -1099,7 +1089,10 @@ def main():
         "section_mode": section_mode,
         "sections_count": len(sections),
         "chapters_count": len(chapters or []),
-        "chapter_titles": [chapter["title"] for chapter in (chapters or [])[:12]],
+        # Titles as they ended up in the book, not as YouTube wrote them
+        "chapter_titles": [
+            section[3] for section in sections[:12] if len(section) == 4
+        ],
         "ai_clean_requested": args.ai_clean,
         "ai_clean_used": use_cleaner,
         "clean_mode": args.clean_mode if use_cleaner else "off",

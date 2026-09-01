@@ -1,6 +1,7 @@
 import sys
 import re
 import json
+import subprocess
 import urllib.parse
 import urllib.request
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
@@ -87,167 +88,186 @@ def sanitize_filename(name):
     return re.sub(r'[\\/*?\:"<>|]', '', name)
 
 
-def fetch_youtube_chapters(video_id):
-    """Fetch chapter timestamps from YouTube video description using Playwright.
+def fetch_video_metadata(url, video_id=None):
+    """Title, thumbnail, duration and chapters in one yt-dlp call.
 
-    Args:
-        video_id: YouTube video ID
-
-    Returns:
-        List of dicts with 'title' and 'timestamp' keys, or None if no chapters found
+    yt-dlp already parses YouTube's own chapter markers, so there is no reason
+    to open a browser and scrape the description for them. oembed backs up the
+    title because it keeps working when yt-dlp is missing or gets bot-checked.
     """
-    if not PLAYWRIGHT_AVAILABLE:
-        print("Playwright not available, cannot fetch chapters")
-        return None
+    video_id = video_id or extract_video_id(url)
+    metadata = {
+        "title": None,
+        "thumbnail": None,
+        "duration": None,
+        "chapters": [],
+        "description": "",
+        "source": None,
+    }
 
+    data = None
+    for command in (
+        [sys.executable, "-m", "yt_dlp"],
+        ["yt-dlp"],
+    ):
+        try:
+            result = subprocess.run(
+                command + ["--dump-single-json", "--skip-download", "--no-playlist", url],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=True,
+            )
+            data = json.loads(result.stdout)
+            break
+        except FileNotFoundError:
+            continue
+        except Exception as error:
+            print(f"yt-dlp metadata lookup failed: {error}")
+            break
+
+    if data:
+        metadata["source"] = "yt-dlp"
+        metadata["title"] = data.get("title") or None
+        metadata["duration"] = data.get("duration")
+        metadata["description"] = data.get("description") or ""
+        metadata["thumbnail"] = data.get("thumbnail")
+        thumbnails = data.get("thumbnails") or []
+        if thumbnails:
+            best = sorted(
+                thumbnails,
+                key=lambda item: (item.get("width") or 0) * (item.get("height") or 0),
+            )[-1]
+            metadata["thumbnail"] = best.get("url") or metadata["thumbnail"]
+        metadata["chapters"] = chapters_from_ytdlp(data.get("chapters"))
+        if not metadata["chapters"]:
+            metadata["chapters"] = parse_chapters_from_description(metadata["description"])
+
+    if not metadata["title"]:
+        metadata["title"] = fetch_video_title(url)
+        metadata["source"] = metadata["source"] or "oembed"
+    if not metadata["thumbnail"] and video_id:
+        metadata["thumbnail"] = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+
+    return metadata
+
+
+PLACEHOLDER_CHAPTER_TITLE = re.compile(r"^<untitled chapter\s*\d*>$", re.IGNORECASE)
+
+
+def chapters_from_ytdlp(raw_chapters):
+    """Normalise yt-dlp's chapter list into {'title', 'timestamp'} dicts."""
+    chapters = []
+    for chapter in raw_chapters or []:
+        start = chapter.get("start_time")
+        if start is None:
+            continue
+        title = (chapter.get("title") or "").strip()
+        if PLACEHOLDER_CHAPTER_TITLE.match(title):
+            title = ""
+        chapters.append({"title": title, "timestamp": int(start)})
+    return chapters
+
+
+TIMESTAMP_PATTERN = r"(\d{1,3}:\d{2}(?::\d{2})?)"
+CHAPTER_LINE_LEADING = re.compile(
+    r"^[\s\-–—•*#>]*[\(\[]?" + TIMESTAMP_PATTERN + r"[\)\]]?\s*[\-–—:|.)]*\s*(.+)$"
+)
+CHAPTER_LINE_TRAILING = re.compile(
+    r"^(.+?)\s*[\-–—:|]?\s*[\(\[]?" + TIMESTAMP_PATTERN + r"[\)\]]?[\s\-–—]*$"
+)
+
+
+def timestamp_to_seconds(timestamp):
+    parts = timestamp.split(":")
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-
-            # Navigate to YouTube video page
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            page.goto(url, timeout=30000)
-
-            # Wait for page to load
-            page.wait_for_load_state("networkidle", timeout=10000)
-
-            # Try to get description from the page
-            try:
-                description = None
-
-                # Method 1: Use ytInitialData which contains the FULL description
-                # This is more reliable than clicking buttons
-                try:
-                    initial_data_script = page.query_selector('script:has-text("ytInitialData")')
-                    if initial_data_script:
-                        script_content = initial_data_script.text_content()
-                        # Extract the JSON data
-                        match = re.search(r'ytInitialData\s*=\s*({.+?})\s*;</script>', script_content, re.DOTALL)
-                        if not match:
-                            match = re.search(r'ytInitialData\s*=\s*({.+});', script_content, re.DOTALL)
-                        if match:
-                            try:
-                                data = json.loads(match.group(1))
-                                # Navigate the YouTube data structure to find description
-                                contents = data.get('contents', {}).get('twoColumnWatchNextResults', {}).get('results', {}).get('results', {}).get('contents', [])
-
-                                for content in contents:
-                                    if 'videoSecondaryInfoRenderer' in content:
-                                        desc_data = content['videoSecondaryInfoRenderer'].get('description', {})
-                                        if 'runs' in desc_data:
-                                            # Build description from text runs
-                                            description_parts = []
-                                            for run in desc_data['runs']:
-                                                if 'text' in run:
-                                                    description_parts.append(run['text'])
-                                            description = '\n'.join(description_parts)
-                                            break
-                            except Exception as e:
-                                print(f"Error parsing ytInitialData JSON: {e}")
-                                pass
-                except Exception as e:
-                    print(f"Error extracting ytInitialData: {e}")
-                    pass
-
-                # Method 2: Fallback - try clicking "Show more" button
-                if not description or len(description) < 500:
-                    try:
-                        # Scroll to make description visible
-                        page.evaluate('window.scrollTo(0, 500)')
-                        page.wait_for_timeout(500)
-
-                        # Try multiple selectors for the "Show more" button
-                        show_more_selectors = [
-                            '#expand',
-                            '#expand-button',
-                            'tp-yt-paper-button#expand',
-                            'ytd-text-inline-expander #expand',
-                            'button[aria-label="Show more"]',
-                        ]
-
-                        for selector in show_more_selectors:
-                            try:
-                                show_more_button = page.query_selector(selector)
-                                if show_more_button:
-                                    show_more_button.click()
-                                    page.wait_for_timeout(1000)
-                                    break
-                            except:
-                                continue
-
-                        # Try to get description from various containers
-                        desc_selectors = [
-                            'ytd-text-inline-expander#description',
-                            '#description-inner',
-                            'yt-attributed-string#description',
-                            'ytd-video-secondary-info-renderer #description',
-                        ]
-
-                        for selector in desc_selectors:
-                            try:
-                                desc_container = page.query_selector(selector)
-                                if desc_container:
-                                    description = desc_container.text_content()
-                                    if len(description) >= 500:
-                                        break
-                            except:
-                                continue
-                    except:
-                        pass
-
-                if not description or len(description) < 100:
-                    print("Could not extract full description from page")
-                    return None
-
-                # Parse chapters from description
-                chapters = []
-                timestamp_pattern = r'^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)$'
-
-                lines = description.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    match = re.match(timestamp_pattern, line)
-                    if match:
-                        timestamp_str = match.group(1)
-                        title = match.group(2).strip()
-
-                        # Convert timestamp to seconds
-                        parts = timestamp_str.split(':')
-                        if len(parts) == 2:  # MM:SS
-                            minutes, seconds = int(parts[0]), int(parts[1])
-                            total_seconds = minutes * 60 + seconds
-                        elif len(parts) == 3:  # HH:MM:SS
-                            hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
-                            total_seconds = hours * 3600 + minutes * 60 + seconds
-                        else:
-                            continue
-
-                        chapters.append({
-                            'title': title,
-                            'timestamp': total_seconds
-                        })
-
-                # Only return if we found at least 2 chapters
-                if len(chapters) >= 2:
-                    print(f"Found {len(chapters)} chapters in video description")
-                    return chapters
-                else:
-                    print(f"No valid chapters found (detected {len(chapters)} chapters, need at least 2)")
-                    return None
-
-            except Exception as e:
-                print(f"Error parsing chapters: {e}")
-                return None
-            finally:
-                browser.close()
-
-    except Exception as e:
-        print(f"Error fetching chapters with Playwright: {e}")
+        parts = [int(part) for part in parts]
+    except ValueError:
         return None
-
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
     return None
 
+
+def parse_chapters_from_description(description):
+    """Timestamp lines in a description, for videos YouTube itself did not chapter.
+
+    Handles the common shapes: "0:00 Intro", "0:00 - Intro", "(0:00) Intro",
+    and — only when no leading-timestamp lines exist at all — "Intro 0:00".
+    """
+    if not description:
+        return []
+
+    leading = []
+    trailing = []
+    for raw_line in description.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        match = CHAPTER_LINE_LEADING.match(line)
+        if match:
+            seconds = timestamp_to_seconds(match.group(1))
+            title = match.group(2).strip(" -–—:|")
+            if seconds is not None and title:
+                leading.append({"title": title, "timestamp": seconds})
+                continue
+
+        match = CHAPTER_LINE_TRAILING.match(line)
+        if match:
+            seconds = timestamp_to_seconds(match.group(2))
+            title = match.group(1).strip(" -–—:|")
+            if seconds is not None and title:
+                trailing.append({"title": title, "timestamp": seconds})
+
+    chapters = leading if len(leading) >= 2 else trailing
+    return chapters if len(chapters) >= 2 else []
+
+
+def normalize_chapters(chapters, total_duration=None, min_chapter_seconds=60):
+    """Sort, dedupe, cover the opening, and merge away micro-chapters.
+
+    A marker less than min_chapter_seconds after the previous one is worth about
+    a paragraph, so it is folded into it rather than becoming its own chapter.
+    The threshold is deliberately low: creator-written chapters are usually good
+    and should survive intact.
+    """
+    if not chapters:
+        return []
+
+    by_timestamp = {}
+    for chapter in chapters:
+        timestamp = max(0, int(chapter.get("timestamp") or 0))
+        title = (chapter.get("title") or "").strip()
+        if timestamp not in by_timestamp or (title and not by_timestamp[timestamp]):
+            by_timestamp[timestamp] = title
+
+    ordered = [
+        {"timestamp": timestamp, "title": by_timestamp[timestamp]}
+        for timestamp in sorted(by_timestamp)
+        if total_duration is None or timestamp < total_duration
+    ]
+    if not ordered:
+        return []
+
+    if ordered[0]["timestamp"] > 5:
+        ordered.insert(0, {"timestamp": 0, "title": ""})
+
+    kept = [ordered[0]]
+    for chapter in ordered[1:]:
+        if chapter["timestamp"] - kept[-1]["timestamp"] < min_chapter_seconds:
+            continue
+        kept.append(chapter)
+
+    if len(kept) < 2:
+        return []
+
+    for index, chapter in enumerate(kept):
+        if not chapter["title"]:
+            chapter["title"] = "Introduction" if index == 0 else f"Chapter {index + 1}"
+    return kept
 
 
 def fetch_transcript_with_playwright(video_id):
@@ -445,6 +465,65 @@ def format_timestamp(seconds):
     secs = int(seconds % 60)
     return f"{mins:02d}:{secs:02d}"
 
+
+# YouTube's auto-captions carry markup that means nothing in a book: ">>" for a
+# speaker change, "[Music]" / "[laughter]" for sounds, "[ __ ]" for a bleeped
+# word. The LLM pass does not reliably strip these, so do it deterministically —
+# it then works with no API key at all.
+CAPTION_SPEAKER_MARKER = re.compile(r"(?:^|\s)>{2,}\s*")
+CAPTION_SOUND_TAG = re.compile(r"\[\s*([^\[\]\n]{0,30}?)\s*\]")
+CAPTION_KNOWN_TAGS = {
+    "music", "applause", "laughter", "laughs", "laughing", "laugh", "chuckles",
+    "chuckling", "sighs", "sighing", "snorts", "coughs", "coughing", "gasps",
+    "clears throat", "throat clearing", "inaudible", "unintelligible",
+    "crosstalk", "silence", "noise", "cheering", "clapping", "singing",
+    "sniffs", "exhales", "inhales", "beep", "foreign",
+}
+# Only ever strip the tag vocabulary auto-captions actually emit — a bracket
+# holding real speech, like "[revenue minus cost]", has to survive
+# Only paired emphasis, so censored profanity like "f***" is left alone
+MARKDOWN_EMPHASIS = re.compile(r"\*\*(\S.*?\S|\S)\*\*|`([^`\n]+)`")
+MARKDOWN_LEFTOVERS = re.compile(r"^\s*(?:#{1,6}\s+|[-*]\s+)", re.MULTILINE)
+
+
+def _drop_sound_tag(match):
+    inner = re.sub(r"\s+", " ", match.group(1)).strip()
+    if not inner or set(inner) <= {"_"}:
+        return " "
+    normalized = inner.lower()
+    if normalized in CAPTION_KNOWN_TAGS:
+        return " "
+    # "[inaudible 01:12]" and friends
+    if re.fullmatch(r"(?:%s)[\s\d:]*" % "|".join(CAPTION_KNOWN_TAGS), normalized):
+        return " "
+    return match.group(0)
+
+
+def normalize_caption_text(text):
+    """Strip caption markup and stray markdown from transcript text."""
+    if not text:
+        return ""
+    text = MARKDOWN_LEFTOVERS.sub(" ", text)
+    text = MARKDOWN_EMPHASIS.sub(lambda m: m.group(1) or m.group(2), text)
+    text = text.replace("\n", " ")
+    text = CAPTION_SPEAKER_MARKER.sub(" ", text)
+    text = CAPTION_SOUND_TAG.sub(_drop_sound_tag, text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([,.!?;:，。！？])", r"\1", text)
+    return text.strip()
+
+
+def sanitize_transcript_entries(entries):
+    """Apply normalize_caption_text across a transcript, dropping emptied entries."""
+    cleaned = []
+    for entry in entries:
+        text = normalize_caption_text(entry.text)
+        if not text:
+            continue
+        entry.text = text
+        cleaned.append(entry)
+    return cleaned
+
 def clean_transcript_entries(entries, use_cleaner=False, api_key=None, progress_callback=None):
     """
     Clean transcript entries using LLM if enabled
@@ -476,48 +555,71 @@ def clean_transcript_entries(entries, use_cleaner=False, api_key=None, progress_
         print(f"Warning: LLM cleaning failed ({e}), using original transcript")
         return entries, None
 
+def accumulate_usage(total_usage_stats, usage_stats):
+    if not usage_stats:
+        return
+    total_usage_stats["input_tokens"] += usage_stats["input_tokens"]
+    total_usage_stats["output_tokens"] += usage_stats["output_tokens"]
+    total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
+    total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
+    total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
+    total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
+
+
+def empty_usage_stats():
+    return {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0,
+        "cost_cny": 0,
+        "cost_known": True,
+    }
+
+
+SENTENCE_ENDINGS = (".", "!", "?", "。", "！", "？", "…")
+
+
+def split_at_sentence_end(entries, max_lookback=5):
+    """Split entries into (kept, carry) at the last sentence end near the tail.
+
+    The carry belongs to the next section — dropping it, as this used to, quietly
+    deleted a few lines of transcript at every single section boundary.
+    """
+    if not entries:
+        return entries, []
+
+    for index in range(len(entries) - 1, max(-1, len(entries) - 1 - max_lookback), -1):
+        if entries[index].text.strip().endswith(SENTENCE_ENDINGS):
+            return entries[: index + 1], entries[index + 1 :]
+
+    return entries, []
+
+
 def group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=False, api_key=None, progress_callback=None):
     """Group transcript entries into sections of interval_seconds (default 40 min - double the size).
     Returns: (sections, usage_stats) tuple"""
     sections = []
     current_section = []
     current_start = 0
-    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0, "cost_known": True}
+    total_usage_stats = empty_usage_stats()
 
     for entry in transcript:
         if entry.start >= current_start + interval_seconds and current_section:
-            # Clean the section if cleaner is enabled
-            cleaned_section, usage_stats = clean_transcript_entries(current_section, use_cleaner, api_key, progress_callback)
-            # Accumulate usage stats
-            if usage_stats:
-                total_usage_stats["input_tokens"] += usage_stats["input_tokens"]
-                total_usage_stats["output_tokens"] += usage_stats["output_tokens"]
-                total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
-                total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
-                total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
-                total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
-            # Try to end at a complete sentence
-            cleaned_section = end_section_at_sentence(cleaned_section)
+            # Break at a sentence end and hand the remainder to the next section
+            kept, carry = split_at_sentence_end(current_section)
+            cleaned_section, usage_stats = clean_transcript_entries(kept, use_cleaner, api_key, progress_callback)
+            accumulate_usage(total_usage_stats, usage_stats)
             sections.append((current_start, current_start + interval_seconds, cleaned_section))
             current_start += interval_seconds
-            current_section = []
+            current_section = list(carry)
         current_section.append(entry)
+
     if current_section:
-        # Clean the last section if cleaner is enabled
         cleaned_section, usage_stats = clean_transcript_entries(current_section, use_cleaner, api_key, progress_callback)
-        # Accumulate usage stats
-        if usage_stats:
-            total_usage_stats["input_tokens"] += usage_stats["input_tokens"]
-            total_usage_stats["output_tokens"] += usage_stats["output_tokens"]
-            total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
-            total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
-            total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
-            total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
-        # Add the last section
-        cleaned_section = end_section_at_sentence(cleaned_section)
+        accumulate_usage(total_usage_stats, usage_stats)
         sections.append((current_start, current_start + interval_seconds, cleaned_section))
 
-    # Return both sections and usage stats
     return sections, total_usage_stats if use_cleaner else None
 
 
@@ -534,84 +636,53 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
     Returns:
         (sections, usage_stats) tuple where sections is list of (start, end, text, title) tuples
     """
-    if not chapters or len(chapters) < 2:
-        # Fallback to interval-based grouping if no chapters
+    total_duration = None
+    if transcript:
+        total_duration = transcript[-1].start + transcript[-1].duration
+
+    sorted_chapters = normalize_chapters(chapters, total_duration=total_duration)
+    if len(sorted_chapters) < 2:
+        # Fallback to interval-based grouping if no usable chapters
         return group_transcript_by_interval(transcript, interval_seconds=2400, use_cleaner=use_cleaner, api_key=api_key, progress_callback=progress_callback)
 
     sections = []
-    total_usage_stats = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0, "cost_cny": 0, "cost_known": True}
+    total_usage_stats = empty_usage_stats()
 
-    # Sort chapters by timestamp
-    sorted_chapters = sorted(chapters, key=lambda x: x['timestamp'])
+    # Bucket entries by chapter time range first, so nothing falls between chapters
+    buckets = [[] for _ in sorted_chapters]
+    boundaries = [chapter["timestamp"] for chapter in sorted_chapters]
+    for entry in transcript:
+        index = 0
+        for candidate in range(len(boundaries) - 1, -1, -1):
+            if entry.start >= boundaries[candidate]:
+                index = candidate
+                break
+        buckets[index].append(entry)
 
-    for i in range(len(sorted_chapters)):
-        current_chapter = sorted_chapters[i]
-        start_time = current_chapter['timestamp']
-        title = current_chapter['title']
+    # A chapter marker often lands mid-sentence; move the dangling tail forward
+    for index in range(len(buckets) - 1):
+        kept, carry = split_at_sentence_end(buckets[index])
+        buckets[index] = kept
+        buckets[index + 1] = list(carry) + buckets[index + 1]
 
-        # Determine end time (start of next chapter, or end of transcript)
-        if i < len(sorted_chapters) - 1:
-            end_time = sorted_chapters[i + 1]['timestamp']
+    for index, chapter_entries in enumerate(buckets):
+        if not chapter_entries:
+            continue
+
+        start_time = chapter_entries[0].start
+        if index + 1 < len(sorted_chapters):
+            end_time = sorted_chapters[index + 1]["timestamp"]
         else:
-            # Last chapter - use the end of the transcript
-            if transcript:
-                end_time = transcript[-1].start + transcript[-1].duration
-            else:
-                end_time = start_time + 3600  # Default 1 hour
+            end_time = total_duration if total_duration else start_time + 3600
 
-        # Collect all transcript entries within this chapter's time range
-        chapter_entries = []
-        for entry in transcript:
-            # Include entries that fall within this chapter
-            if start_time <= entry.start < end_time:
-                chapter_entries.append(entry)
+        cleaned_section, usage_stats = clean_transcript_entries(chapter_entries, use_cleaner, api_key, progress_callback)
+        accumulate_usage(total_usage_stats, usage_stats)
 
-        if chapter_entries:
-            # Clean the section if cleaner is enabled
-            cleaned_section, usage_stats = clean_transcript_entries(chapter_entries, use_cleaner, api_key, progress_callback)
-
-            # Accumulate usage stats
-            if usage_stats:
-                total_usage_stats["input_tokens"] += usage_stats["input_tokens"]
-                total_usage_stats["output_tokens"] += usage_stats["output_tokens"]
-                total_usage_stats["total_tokens"] += usage_stats["total_tokens"]
-                total_usage_stats["cost_usd"] += usage_stats["cost_usd"]
-                total_usage_stats["cost_cny"] += usage_stats["cost_cny"]
-                total_usage_stats["cost_known"] &= usage_stats.get("cost_known", True)
-
-            # Try to end at a complete sentence
-            cleaned_section = end_section_at_sentence(cleaned_section)
-
-            # Append section with title: (start, end, text, title)
-            sections.append((start_time, end_time, cleaned_section, title))
+        # Append section with title: (start, end, text, title)
+        sections.append((start_time, end_time, cleaned_section, sorted_chapters[index]["title"]))
 
     return sections, total_usage_stats if use_cleaner else None
 
-def end_section_at_sentence(entries):
-    """Try to end the section at a complete sentence."""
-    if not entries:
-        return entries
-    
-    # Look for sentence endings in the last few entries
-    for i in range(len(entries) - 1, max(0, len(entries) - 5), -1):
-        text = entries[i].text.strip()
-        if text.endswith('.') or text.endswith('!') or text.endswith('?'):
-            return entries[:i+1]
-    
-    # If no sentence ending found, return all entries
-    return entries
-
-def create_title_page(title, video_id):
-    html = f"""
-    <html><head></head><body>
-    <h1 style='text-align:center;margin-top:2em;font-size:2.5em;'>{title}</h1>
-    <h3 style='text-align:center;margin-top:1em;'>YouTube Transcript</h3>
-    <p style='text-align:center;margin-top:2em;'>Video ID: {video_id}</p>
-    </body></html>
-    """
-    title_page = epub.EpubHtml(title='Title Page', file_name='title.xhtml', lang='en')
-    title_page.content = html
-    return title_page
 
 def transcript_sections_to_epub_chapters(sections):
     chapters = []
@@ -965,7 +1036,12 @@ def main():
         type=int,
         default=20,
         metavar="MINUTES",
-        help="minutes of transcript per chapter (default: 20)",
+        help="minutes of transcript per chapter when the video has no chapters (default: 20)",
+    )
+    parser.add_argument(
+        "--no-auto-chapters",
+        action="store_true",
+        help="ignore the video's own chapter markers and use fixed intervals",
     )
     args = parser.parse_args()
 
@@ -974,9 +1050,10 @@ def main():
         print("Invalid YouTube URL.")
         sys.exit(1)
 
-    video_title = fetch_video_title(args.url)
+    metadata = fetch_video_metadata(args.url, video_id)
+    video_title = metadata["title"]
     safe_title = sanitize_filename(video_title)
-    transcript = fetch_transcript(video_id)
+    transcript = sanitize_transcript_entries(fetch_transcript(video_id))
     save_raw_transcript(transcript, video_id, video_title)
 
     api_key = llm_config.api_key()
@@ -988,12 +1065,21 @@ def main():
     if clean:
         print(f"🤖 Cleaning with {llm_config.provider_label()}...")
 
-    sections, usage_stats = group_transcript_by_interval(
-        transcript,
-        interval_seconds=max(1, args.interval) * 60,
-        use_cleaner=clean,
-        api_key=api_key,
-    )
+    if metadata["chapters"] and not args.no_auto_chapters:
+        print(f"Using {len(metadata['chapters'])} YouTube chapters.")
+        sections, usage_stats = group_transcript_by_chapters(
+            transcript,
+            metadata["chapters"],
+            use_cleaner=clean,
+            api_key=api_key,
+        )
+    else:
+        sections, usage_stats = group_transcript_by_interval(
+            transcript,
+            interval_seconds=max(1, args.interval) * 60,
+            use_cleaner=clean,
+            api_key=api_key,
+        )
 
     if usage_stats and usage_stats.get("total_tokens", 0) > 0:
         print("\n📊 AI Cleaning Statistics:")
