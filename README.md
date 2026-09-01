@@ -48,10 +48,15 @@ Add a key to `.env` and drop `--no-clean` to get the cleaned version:
 | Flag | Meaning |
 |---|---|
 | `--no-clean` | Skip the LLM pass — no key needed |
-| `--interval MINUTES` | Minutes of transcript per chapter (default 20) |
+| `--interval MINUTES` | Minutes per chapter for videos with no chapters (default 20) |
+| `--no-auto-chapters` | Ignore the video's chapters and use fixed intervals |
 
-The desktop app below adds translation, chapter detection, cover generation
-and the document workflow.
+Chapters come from the video's own chapter markers, so the book's table of
+contents matches what the creator wrote. Videos without them fall back to
+fixed intervals.
+
+The desktop app below adds translation, cover generation and the document
+workflow.
 
 ## Setup (desktop app)
 
