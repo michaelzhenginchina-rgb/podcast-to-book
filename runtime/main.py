@@ -588,18 +588,46 @@ def empty_usage_stats():
 SENTENCE_ENDINGS = (".", "!", "?", "。", "！", "？", "…")
 
 
+class TextEntry:
+    """A transcript entry we build ourselves, when an entry has to be divided."""
+
+    __slots__ = ("text", "start", "duration")
+
+    def __init__(self, text, start, duration=0.0):
+        self.text = text
+        self.start = start
+        self.duration = duration
+
+
+SENTENCE_END_IN_TEXT = re.compile(r"[.!?。！？](?=[\s\"'”’)\]]|$)")
+
+
 def split_at_sentence_end(entries, max_lookback=5):
     """Split entries into (kept, carry) at the last sentence end near the tail.
 
     The carry belongs to the next section — dropping it, as this used to, quietly
-    deleted a few lines of transcript at every single section boundary.
+    deleted a few lines of transcript at every section boundary. A caption line
+    breaks every few words, so the sentence usually ends inside an entry rather
+    than at its edge; when it does, that entry is divided in two.
     """
     if not entries:
         return entries, []
 
     for index in range(len(entries) - 1, max(-1, len(entries) - 1 - max_lookback), -1):
-        if entries[index].text.strip().endswith(SENTENCE_ENDINGS):
+        text = entries[index].text.strip()
+        matches = list(SENTENCE_END_IN_TEXT.finditer(text))
+        if not matches:
+            continue
+
+        cut = matches[-1].end()
+        head, tail = text[:cut].strip(), text[cut:].strip()
+        if not tail:
             return entries[: index + 1], entries[index + 1 :]
+
+        entry = entries[index]
+        kept = list(entries[:index]) + [TextEntry(head, entry.start, entry.duration)]
+        carried = [TextEntry(tail, entry.start, entry.duration)] + list(entries[index + 1 :])
+        return kept, carried
 
     return entries, []
 
@@ -692,6 +720,67 @@ def group_transcript_by_chapters(transcript, chapters, use_cleaner=False, api_ke
     return sections, total_usage_stats if use_cleaner else None
 
 
+PARAGRAPH_TARGET_CHARS = 420
+PARAGRAPH_HARD_CAP = 1200
+
+
+def entries_to_paragraphs(entries, target_chars=PARAGRAPH_TARGET_CHARS, hard_cap=PARAGRAPH_HARD_CAP):
+    """Assemble caption fragments into readable paragraphs.
+
+    Captions arrive as five-word fragments, so paragraphs have to be built. Break
+    only at a sentence end, once there is enough text to be worth breaking —
+    never in the middle of one, which is what left paragraphs ending on "and in
+    the industries we". Videos whose captions carry no punctuation at all have no
+    sentence ends to aim for, so those fall back to breaking on length.
+    """
+    text = " ".join(
+        entry.text.replace("\n", " ").strip() for entry in entries if entry.text.strip()
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return []
+
+    # Sentences are found in the assembled text, not per entry: a caption line
+    # breaks every few words, so a sentence almost always ends inside one
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?。！？])\s+", text)
+        if sentence.strip()
+    ]
+
+    if len(sentences) == 1 and len(text) > hard_cap:
+        # Captions with no punctuation at all — nothing to break on but length
+        words = text.split(" ")
+        paragraphs = []
+        current = []
+        length = 0
+        for word in words:
+            current.append(word)
+            length += len(word) + 1
+            if length >= target_chars:
+                paragraphs.append(" ".join(current))
+                current = []
+                length = 0
+        if current:
+            paragraphs.append(" ".join(current))
+        return paragraphs
+
+    paragraphs = []
+    current = []
+    length = 0
+    for sentence in sentences:
+        current.append(sentence)
+        length += len(sentence) + 1
+        if length >= target_chars:
+            paragraphs.append(" ".join(current))
+            current = []
+            length = 0
+
+    if current:
+        paragraphs.append(" ".join(current))
+    return paragraphs
+
+
 def create_title_page(title, video_id):
     html = f"""
     <html><head></head><body>
@@ -717,44 +806,9 @@ def transcript_sections_to_epub_chapters(sections):
             section_title = f"Section {idx}: {format_timestamp(start)}–{format_timestamp(end)}"
 
         html = f"<h2>{section_title}</h2>\n"
-        # Check if this video has punctuation (sample first 50 entries)
-        has_punctuation = False
-        for entry in entries[:50]:
-            if entry.text.strip().endswith(('.', '!', '?')):
-                has_punctuation = True
-                break
-        
-        # Group transcript into paragraphs based on punctuation availability
-        paragraph = []
-        for i, entry in enumerate(entries):
-            paragraph.append(entry.text.replace('\n', ' '))
-            
-            if has_punctuation:
-                # Use original logic: end paragraph at sentence boundaries
-                current_text = entry.text.strip()
-                if current_text.endswith(('.', '!', '?')):
-                    # Create paragraph text
-                    paragraph_text = " ".join(paragraph)
-                    html += f"<p class='block'>{paragraph_text}</p>\n"
-                    paragraph = []
-            else:
-                # Use new logic: end paragraph every 6 entries if no sentence ending
-                current_text = entry.text.strip()
-                if current_text.endswith(('.', '!', '?')):
-                    # Create paragraph text
-                    paragraph_text = " ".join(paragraph)
-                    html += f"<p class='block'>{paragraph_text}</p>\n"
-                    paragraph = []
-                elif len(paragraph) >= 6:  # Create paragraph every 6 entries if no sentence ending
-                    # Create paragraph text
-                    paragraph_text = " ".join(paragraph)
-                    html += f"<p class='block'>{paragraph_text}</p>\n"
-                    paragraph = []
-            
-            if i == len(entries) - 1:
-                # End of entries, add remaining content
-                paragraph_text = " ".join(paragraph)
-                html += f"<p class='block'>{paragraph_text}</p>\n"
+        for paragraph in entries_to_paragraphs(entries):
+            html += f"<p class='block'>{paragraph}</p>\n"
+
         chapter = epub.EpubHtml(title=section_title, file_name=f'section_{idx:02d}.xhtml', lang='en')
         chapter.content = html
         chapters.append((section_title, chapter))
@@ -1015,26 +1069,8 @@ def save_txt(transcript, title, video_id, sections=None, output_filename=None):
                 f.write(f"{section_title}\n")
                 f.write(f"{'─'*60}\n\n")
 
-                # Group transcript into paragraphs
-                paragraph = []
-                for i, entry in enumerate(entries):
-                    paragraph.append(entry.text)
-
-                    # End paragraph at sentence boundaries
-                    current_text = entry.text.strip()
-                    if current_text.endswith(('.', '!', '?')):
-                        para_text = " ".join(paragraph)
-                        f.write(f"{para_text}\n\n")
-                        paragraph = []
-                    elif len(paragraph) >= 6:
-                        para_text = " ".join(paragraph)
-                        f.write(f"{para_text}\n\n")
-                        paragraph = []
-
-                # Add remaining content
-                if paragraph:
-                    para_text = " ".join(paragraph)
-                    f.write(f"{para_text}\n\n")
+                for paragraph in entries_to_paragraphs(entries):
+                    f.write(f"{paragraph}\n\n")
 
                 f.write("\n")
         else:

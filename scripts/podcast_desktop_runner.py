@@ -23,6 +23,7 @@ from main import (  # noqa: E402
     fetch_video_metadata,
     generate_pdf,
     group_transcript_by_chapters,
+    entries_to_paragraphs,
     group_transcript_by_interval,
     normalize_caption_text,
     sanitize_filename,
@@ -785,23 +786,8 @@ def sections_to_epub_chapters(sections):
             section_title = f"Section {index}: {format_timestamp(start)}-{format_timestamp(end)}"
 
         html_content = f"<h2>{html.escape(section_title)}</h2>\n"
-        paragraph = []
-        paragraph_len = 0
-
-        for entry in entries:
-            text = entry.text.replace("\n", " ").strip()
-            if not text:
-                continue
-            paragraph.append(text)
-            paragraph_len += len(text)
-
-            if text.endswith((".", "!", "?", "。", "！", "？")) or paragraph_len >= 520:
-                html_content += f"<p class='block'>{html.escape(' '.join(paragraph))}</p>\n"
-                paragraph = []
-                paragraph_len = 0
-
-        if paragraph:
-            html_content += f"<p class='block'>{html.escape(' '.join(paragraph))}</p>\n"
+        for paragraph in entries_to_paragraphs(entries):
+            html_content += f"<p class='block'>{html.escape(paragraph)}</p>\n"
 
         chapter = epub.EpubHtml(
             title=section_title,
@@ -834,18 +820,8 @@ def write_clean_txt(title, video_id, sections, output_filename):
             file.write(f"{heading}\n")
             file.write(f"{'-' * 60}\n\n")
 
-            paragraph = []
-            for entry in entries:
-                text = entry.text.replace("\n", " ").strip()
-                if not text:
-                    continue
-                paragraph.append(text)
-                if text.endswith((".", "!", "?")) or len(paragraph) >= 6:
-                    file.write(" ".join(paragraph) + "\n\n")
-                    paragraph = []
-
-            if paragraph:
-                file.write(" ".join(paragraph) + "\n\n")
+            for paragraph in entries_to_paragraphs(entries):
+                file.write(paragraph + "\n\n")
 
 
 def translate_text_file(source_file, title, target_language, api_key):
