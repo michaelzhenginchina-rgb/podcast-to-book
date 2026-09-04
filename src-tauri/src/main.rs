@@ -53,6 +53,30 @@ fn scripts_dir() -> Result<PathBuf, String> {
     Ok(repo_root()?.join("scripts"))
 }
 
+/// Where `.env` and `.venv` live: a real checkout, never the packaged bundle.
+///
+/// A bundled .app carries `scripts/` and `runtime/` in `Contents/Resources`, but
+/// deliberately not the API key or a virtualenv — a key inside an .app travels
+/// to anyone the app is copied to, and a venv is not relocatable. So the app
+/// falls back to the checkout it was built from.
+fn checkout_root() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(dir) = std::env::var(REPO_ENV) {
+        candidates.push(PathBuf::from(dir));
+    }
+    if let Ok(repo) = repo_root() {
+        candidates.push(repo);
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(PathBuf::from(home).join("podcast-to-book"));
+    }
+
+    candidates
+        .into_iter()
+        .find(|dir| dir.join(".env").exists() || dir.join(".venv").exists())
+}
+
 /// Directory of the Python runtime. It ships in-repo under `runtime/`.
 fn podcast_root() -> Result<PathBuf, String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -124,16 +148,33 @@ fn read_env_file(path: &Path) -> HashMap<String, String> {
     values
 }
 
+/// The interpreter that has the dependencies: the one `setup.sh` created.
+///
+/// It builds `<repo>/.venv`, so that is checked first. `runtime/venv` is the
+/// older layout, kept so an existing checkout keeps working. Falling through to
+/// a bare `python3` almost always means a crash on the first import, so say so.
 fn python_bin(podcast_root: &Path) -> PathBuf {
     if let Ok(explicit) = std::env::var("PODCAST_TO_BOOK_PYTHON") {
         return PathBuf::from(explicit);
     }
-    let venv_python = podcast_root.join("venv").join("bin").join("python");
-    if venv_python.exists() {
-        venv_python
-    } else {
-        PathBuf::from("python3")
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(checkout) = checkout_root() {
+        candidates.push(checkout.join(".venv").join("bin").join("python"));
     }
+    candidates.push(podcast_root.join("venv").join("bin").join("python"));
+
+    for candidate in candidates {
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    eprintln!(
+        "No virtualenv found - falling back to python3, which is missing this \
+         project's dependencies. Run ./setup.sh in your checkout."
+    );
+    PathBuf::from("python3")
 }
 
 fn classify_file(path: &Path) -> String {
@@ -232,9 +273,12 @@ fn generate_podcast_ebook_impl(
         command.arg("--auto-chapters");
     }
 
-    // .env lives at the repo root, next to setup.sh - not inside runtime/
-    for (key, value) in read_env_file(&repo_root()?.join(".env")) {
-        command.env(key, value);
+    // .env lives at the checkout root, next to setup.sh - not inside runtime/,
+    // and not inside a packaged .app
+    if let Some(checkout) = checkout_root() {
+        for (key, value) in read_env_file(&checkout.join(".env")) {
+            command.env(key, value);
+        }
     }
 
     let output = command.output().map_err(|err| err.to_string())?;
@@ -333,9 +377,12 @@ fn translate_document_impl(
         .env("PYTHONPATH", &podcast_root)
         .env(RUNTIME_ENV, &podcast_root);
 
-    // .env lives at the repo root, next to setup.sh - not inside runtime/
-    for (key, value) in read_env_file(&repo_root()?.join(".env")) {
-        command.env(key, value);
+    // .env lives at the checkout root, next to setup.sh - not inside runtime/,
+    // and not inside a packaged .app
+    if let Some(checkout) = checkout_root() {
+        for (key, value) in read_env_file(&checkout.join(".env")) {
+            command.env(key, value);
+        }
     }
 
     let output = command.output().map_err(|err| err.to_string())?;
